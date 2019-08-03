@@ -1,0 +1,23 @@
+// Character definitions
+space_char = _{ " " | "\t" }
+label_char = _{ '!'..',' | '.'..'~' }
+base64_char = _{ ASCII_ALPHANUMERIC | "+" | "/" }
+header_name_char = _{ ASCII_ALPHA | "-" }
+header_body_char = _{ ' '..'~' } // Any printable ascii char
+
+// Useful Components
+spaces = _{ space_char* }
+
+// Small Components
+label = { label_char+ ~ (("-" | " ") ~ label_char+)* }
+header_name = { header_name_char+ }
+header_body = { header_body_char* ~ (NEWLINE ~ " " ~ spaces ~ header_body_char*)* }
+header = { header_name ~ ":" ~ spaces ~ header_body }
+
+// Portions
+pre_eb = { "-----BEGIN " ~ PUSH(label) ~ "-----" }
+post_eb = { "-----END " ~ POP ~ "-----" }
+headers = { (header ~ NEWLINE)+ }
+content = { base64_char+ ~ (NEWLINE ~ base64_char+)* ~ "="{, 2} }
+
+pem = { pre_eb ~ NEWLINE ~ headers ~ NEWLINE ~ content ~ NEWLINE ~ post_eb }
