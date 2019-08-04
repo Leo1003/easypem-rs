@@ -1,3 +1,5 @@
+use crate::builder::PemBuilder;
+use crate::PemMessage;
 use pest::{error::*, Parser, Position};
 
 lazy_static! {
@@ -15,7 +17,10 @@ fn rfc1421_base64_decode<T: ?Sized + AsRef<[u8]>>(
 #[grammar = "pem.pest"]
 struct PemParser;
 
-fn pem_parser(input: &str) -> Result<(), Error<Rule>> {
+fn pem_parser(input: &str) -> Result<PemMessage, Error<Rule>> {
+    // Create internal builder
+    let mut builder = PemBuilder::default();
+
     let mut pem_pairs = PemParser::parse(Rule::pem, input)?;
     if let Some(pem_tokens) = pem_pairs.next() {
         for portions in pem_tokens.into_inner() {
@@ -23,6 +28,7 @@ fn pem_parser(input: &str) -> Result<(), Error<Rule>> {
                 Rule::pre_eb => {
                     let mut eb_pairs = portions.into_inner();
                     let label = eb_pairs.next().unwrap().as_str();
+                    builder.label(label);
                 }
                 Rule::post_eb => (),
                 Rule::content => {
@@ -33,25 +39,25 @@ fn pem_parser(input: &str) -> Result<(), Error<Rule>> {
                     let data = rfc1421_base64_decode(&raw_content).map_err(|err| {
                         Error::new_from_span(custom_error(&err.to_string()), portions.as_span())
                     })?;
-                    dbg!(&data);
+                    builder.content(data);
                 }
                 Rule::headers => {
                     let headers_pairs = portions.into_inner();
-                    let mut headers = Vec::with_capacity(headers_pairs.size_hint().0);
                     for header_pair in headers_pairs {
                         let mut header_inner = header_pair.into_inner();
                         let name = header_inner.next().unwrap().as_str();
                         let mut body = String::new();
+                        // Unfold the header body
                         for line in header_inner.next().unwrap().as_str().lines() {
                             body.push_str(line.trim());
                         }
-                        headers.push((name, body));
+                        builder.header(name, body);
                     }
                 }
                 _ => unreachable!(),
             }
         }
-        Ok(())
+        Ok(builder.build())
     } else {
         Err(Error::new_from_pos(
             custom_error("Missing PEM block"),
@@ -60,6 +66,7 @@ fn pem_parser(input: &str) -> Result<(), Error<Rule>> {
     }
 }
 
+/// Internal helper for making ErrorVariant::CustomError
 fn custom_error(message: &str) -> ErrorVariant<Rule> {
     ErrorVariant::CustomError {
         message: message.to_owned(),
@@ -167,16 +174,19 @@ YSBibGFuayBsaW5lOg0KDQpUaGlzIGlzIHRoZSBlbmQuDQo=
 
     #[test]
     fn pem_parse_figure2() {
-        pem_parser(RFC1421_FIGURE2).unwrap();
+        let pem = pem_parser(RFC1421_FIGURE2).unwrap();
+        assert_eq!(&pem.label, "PRIVACY-ENHANCED MESSAGE");
     }
 
     #[test]
     fn pem_parse_figure3() {
-        pem_parser(RFC1421_FIGURE3).unwrap();
+        let pem = pem_parser(RFC1421_FIGURE3).unwrap();
+        assert_eq!(&pem.label, "PRIVACY-ENHANCED MESSAGE");
     }
 
     #[test]
     fn pem_parse_figure4() {
-        pem_parser(RFC1421_FIGURE4).unwrap();
+        let pem = pem_parser(RFC1421_FIGURE4).unwrap();
+        assert_eq!(&pem.label, "PRIVACY-ENHANCED MESSAGE");
     }
 }
