@@ -1,9 +1,10 @@
-use crate::{PemMessage, RawPemHeader};
+use crate::headers::PemHeader;
+use crate::PemMessage;
 
 #[derive(Debug, Default)]
 pub struct PemBuilder<'p> {
     label: Option<&'p str>,
-    rawheaders: Vec<(&'p str, String)>,
+    headers: Option<PemHeader>,
     content: Vec<u8>,
 }
 
@@ -13,8 +14,8 @@ impl<'p> PemBuilder<'p> {
         self
     }
 
-    pub fn header(&mut self, name: &'p str, body: String) -> &mut Self {
-        self.rawheaders.push((name, body));
+    pub fn headers(&mut self, headers: PemHeader) -> &mut Self {
+        self.headers = Some(headers);
         self
     }
 
@@ -29,17 +30,10 @@ impl<'p> PemBuilder<'p> {
         } else {
             String::new()
         };
-        let headers = self
-            .rawheaders
-            .into_iter()
-            .map(|(name, body)| RawPemHeader {
-                name: name.to_owned(),
-                body,
-            })
-            .collect();
+        let headers = self.headers.unwrap_or_default();
         PemMessage {
             label,
-            rawheaders: headers,
+            headers: headers,
             content: self.content,
         }
     }

@@ -11,7 +11,7 @@ mod parser;
 #[derive(Debug)]
 pub struct PemMessage {
     pub label: String,
-    pub rawheaders: Vec<RawPemHeader>,
+    pub headers: headers::PemHeader,
     pub content: Vec<u8>,
 }
 

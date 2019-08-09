@@ -1,6 +1,12 @@
+use crate::parser::{custom_error_span, Rule};
 use crate::RawPemHeader;
+use pest::error::{Error, ErrorVariant};
+use pest::iterators::{Pair, Pairs};
+use std::borrow::Cow;
+use std::str::FromStr;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// Struct to store standard PEM header
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PemHeader {
     proc_type: Option<ProcType>,
     content_domain: Option<String>,
@@ -8,6 +14,59 @@ pub struct PemHeader {
     originator: Option<Originator>,
     mic_info: Option<MICInfo>,
     recipients: Vec<Recipient>,
+    crl: Option<CRL>,
+}
+
+impl PemHeader {
+    pub(crate) fn from_pairs(mut pairs: Pairs<'_, Rule>) -> Result<Self, Error<Rule>> {
+        if let Some(entry) = pairs.next() {
+            let mut newheader = PemHeader::default();
+            // The first entry should be Proc-Type
+            newheader.parse_proc_type(entry)?;
+
+            Ok(newheader)
+        } else {
+            // No header exists
+            // Return an empty headers
+            Ok(PemHeader::default())
+        }
+    }
+
+    fn parse_proc_type(&mut self, entry: Pair<'_, Rule>) -> Result<(), Error<Rule>> {
+        let (name, body) = pair_to_raw(entry.clone());
+        if name == "Proc-Type" {
+            let mut iter = body.splitn(2, ",");
+            if let Some((n, s)) = iter.next().iter().zip(iter.next()).next() {
+                let num = n
+                    .parse::<u32>()
+                    .map_err(|e| custom_error_span(&e.to_string(), &entry))?;
+                let spec = match s {
+                    "ENCRYPTED" => ProcTypeSpecifier::ENCRYPTED,
+                    "MIC-ONLY" => ProcTypeSpecifier::MIC_ONLY,
+                    "MIC-CLEAR" => ProcTypeSpecifier::MIC_CLEAR,
+                    "CRL" => ProcTypeSpecifier::CRL,
+                    _ => return Err(custom_error_span("Invalid Proc-Type specifier", &entry)),
+                };
+
+                self.proc_type = Some(ProcType(num, spec));
+            } else {
+                return Err(custom_error_span("Invalid Proc-Type content", &entry));
+            }
+            Ok(())
+        } else {
+            Err(custom_error_span("Expected Proc-Type entry", &entry))
+        }
+    }
+
+    fn parse_content_domain(&mut self, entry: Pair<'_, Rule>) -> Result<(), Error<Rule>> {
+        let (name, body) = pair_to_raw(entry.clone());
+        if name == "Content-Domain" {
+            self.content_domain = Some(body.into_owned());
+            Ok(())
+        } else {
+            Err(custom_error_span("Expected Content-Domain entry", &entry))
+        }
+    }
 }
 
 /// `Proc-Type` header field
@@ -34,6 +93,10 @@ pub struct DEKInfo {
 /// Certificate stored in base64 form
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Certificate(Vec<u8>);
+
+/// Certificate Revoked List stored in base64 form
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CRL(Vec<u8>);
 
 /// Represent single recipient related fields
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -128,4 +191,24 @@ pub struct MICInfo {
     pub ik_algorithm: String,
     /// Base64 signature data
     pub signature: Vec<u8>,
+}
+
+fn pair_to_raw<'i>(entry: Pair<'i, Rule>) -> (&'i str, Cow<'i, str>) {
+    let mut entry_inner = entry.into_inner();
+    let name = entry_inner.next().unwrap().as_str();
+    let mut body = Cow::Borrowed("");
+    // Unfold the header body
+    for (n, line) in entry_inner.next().unwrap().as_str().lines().enumerate() {
+        if n == 0 {
+            body = Cow::Borrowed(line);
+        } else {
+            body.to_mut().push_str(line.trim());
+        }
+    }
+    (name, body)
+}
+
+fn peek_entry_name<'i>(entry: &Pair<'i, Rule>) -> &'i str {
+    let mut entry_inner = entry.clone().into_inner();
+    entry_inner.next().unwrap().as_str()
 }

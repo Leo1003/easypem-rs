@@ -1,5 +1,8 @@
 use crate::builder::PemBuilder;
+use crate::headers::PemHeader;
 use crate::PemMessage;
+use pest::iterators::Pair;
+use pest::RuleType;
 use pest::{error::*, Parser, Position};
 
 lazy_static! {
@@ -36,41 +39,47 @@ fn pem_parser(input: &str) -> Result<PemMessage, Error<Rule>> {
                     for content_line in portions.as_str().lines() {
                         raw_content.push_str(content_line.trim());
                     }
-                    let data = rfc1421_base64_decode(&raw_content).map_err(|err| {
-                        Error::new_from_span(custom_error(&err.to_string()), portions.as_span())
-                    })?;
+                    let data = rfc1421_base64_decode(&raw_content)
+                        .map_err(|err| custom_error_span(&err.to_string(), &portions))?;
                     builder.content(data);
                 }
                 Rule::headers => {
                     let headers_pairs = portions.into_inner();
-                    for header_pair in headers_pairs {
-                        let mut header_inner = header_pair.into_inner();
-                        let name = header_inner.next().unwrap().as_str();
-                        let mut body = String::new();
-                        // Unfold the header body
-                        for line in header_inner.next().unwrap().as_str().lines() {
-                            body.push_str(line.trim());
-                        }
-                        builder.header(name, body);
-                    }
+                    let headers = PemHeader::from_pairs(headers_pairs)?;
+                    builder.headers(headers);
                 }
                 _ => unreachable!(),
             }
         }
         Ok(builder.build())
     } else {
-        Err(Error::new_from_pos(
-            custom_error("Missing PEM block"),
+        Err(custom_error_pos(
+            "Missing PEM block",
             Position::from_start(input),
         ))
     }
 }
 
-/// Internal helper for making ErrorVariant::CustomError
-fn custom_error(message: &str) -> ErrorVariant<Rule> {
-    ErrorVariant::CustomError {
-        message: message.to_owned(),
-    }
+/// Internal helper for making Error
+#[inline]
+pub(crate) fn custom_error_span(message: &str, pair: &Pair<'_, Rule>) -> Error<Rule> {
+    Error::new_from_span(
+        ErrorVariant::CustomError {
+            message: message.to_owned(),
+        },
+        pair.as_span(),
+    )
+}
+
+/// Internal helper for making Error
+#[inline]
+pub(crate) fn custom_error_pos(message: &str, pos: Position) -> Error<Rule> {
+    Error::new_from_pos(
+        ErrorVariant::CustomError {
+            message: message.to_owned(),
+        },
+        pos,
+    )
 }
 
 #[cfg(test)]
