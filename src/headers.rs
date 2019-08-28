@@ -3,6 +3,7 @@ use crate::RawPemHeader;
 use pest::error::{Error, ErrorVariant};
 use pest::iterators::{Pair, Pairs};
 use std::borrow::Cow;
+use std::fmt;
 use std::str::FromStr;
 
 /// Struct to store standard PEM header
@@ -24,6 +25,14 @@ impl PemHeader {
             // The first entry should be Proc-Type
             newheader.parse_proc_type(entry)?;
 
+            for entry in pairs {
+                match peek_entry_name(&entry) {
+                    "Content-Domain" => newheader.parse_content_domain(entry)?,
+                    "DEK-Info" => newheader.parse_dekinfo(entry)?,
+                    _ => return Err(custom_error_span("Unknown header entry", &entry)),
+                }
+            }
+
             Ok(newheader)
         } else {
             // No header exists
@@ -35,23 +44,8 @@ impl PemHeader {
     fn parse_proc_type(&mut self, entry: Pair<'_, Rule>) -> Result<(), Error<Rule>> {
         let (name, body) = pair_to_raw(entry.clone());
         if name == "Proc-Type" {
-            let mut iter = body.splitn(2, ",");
-            if let Some((n, s)) = iter.next().iter().zip(iter.next()).next() {
-                let num = n
-                    .parse::<u32>()
-                    .map_err(|e| custom_error_span(&e.to_string(), &entry))?;
-                let spec = match s {
-                    "ENCRYPTED" => ProcTypeSpecifier::ENCRYPTED,
-                    "MIC-ONLY" => ProcTypeSpecifier::MIC_ONLY,
-                    "MIC-CLEAR" => ProcTypeSpecifier::MIC_CLEAR,
-                    "CRL" => ProcTypeSpecifier::CRL,
-                    _ => return Err(custom_error_span("Invalid Proc-Type specifier", &entry)),
-                };
-
-                self.proc_type = Some(ProcType(num, spec));
-            } else {
-                return Err(custom_error_span("Invalid Proc-Type content", &entry));
-            }
+            self.proc_type =
+                Some(ProcType::parse_body(body).map_err(|e| custom_error_span(e, &entry))?);
             Ok(())
         } else {
             Err(custom_error_span("Expected Proc-Type entry", &entry))
@@ -67,11 +61,37 @@ impl PemHeader {
             Err(custom_error_span("Expected Content-Domain entry", &entry))
         }
     }
+
+    fn parse_dekinfo(&mut self, entry: Pair<'_, Rule>) -> Result<(), Error<Rule>> {
+        let (name, body) = pair_to_raw(entry.clone());
+        if name == "DEK-Info" {
+            self.dek_info =
+                Some(DEKInfo::parse_body(body).map_err(|e| custom_error_span(e, &entry))?);
+            Ok(())
+        } else {
+            Err(custom_error_span("Expected DEK-Info entry", &entry))
+        }
+    }
 }
 
 /// `Proc-Type` header field
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ProcType(pub u32, pub ProcTypeSpecifier);
+
+impl ProcType {
+    pub(self) fn parse_body<S: AsRef<str>>(body: S) -> Result<Self, String> {
+        let mut iter = body.as_ref().splitn(2, ",");
+        if let Some((n, s)) = iter.next().iter().zip(iter.next()).next() {
+            let num = n.parse::<u32>().map_err(|e| e.to_string())?;
+            let spec = ProcTypeSpecifier::from_str(s)
+                .map_err(|_| "Invalid Proc-Type specifier".to_owned())?;
+
+            Ok(ProcType(num, spec))
+        } else {
+            Err("Invalid Proc-Type content".to_owned())
+        }
+    }
+}
 
 /// Enumerations for different PEM type
 #[allow(non_camel_case_types)]
@@ -83,11 +103,44 @@ pub enum ProcTypeSpecifier {
     CRL,
 }
 
+impl FromStr for ProcTypeSpecifier {
+    type Err = ();
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        use ProcTypeSpecifier::*;
+        match s {
+            "ENCRYPTED" => Ok(ENCRYPTED),
+            "MIC-ONLY" => Ok(MIC_ONLY),
+            "MIC-CLEAR" => Ok(MIC_CLEAR),
+            "CRL" => Ok(CRL),
+            _ => Err(()),
+        }
+    }
+}
+
 /// `DEK-Info` header field
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DEKInfo {
     pub algorithm: String,
     pub parameter: Vec<u8>,
+}
+
+impl DEKInfo {
+    pub(self) fn parse_body<S: AsRef<str>>(body: S) -> Result<Self, String> {
+        let mut splited = body.as_ref().splitn(2, ",");
+        if let Some(algo) = splited.next() {
+            let data = if let Some(hexdata) = splited.next() {
+                hex::decode(hexdata).map_err(|e| e.to_string())?
+            } else {
+                Vec::new()
+            };
+            Ok(DEKInfo {
+                algorithm: algo.to_owned(),
+                parameter: data,
+            })
+        } else {
+            Err("Invalid DEK-Info content".to_owned())
+        }
+    }
 }
 
 /// Certificate stored in base64 form

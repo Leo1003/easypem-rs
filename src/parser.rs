@@ -62,10 +62,10 @@ fn pem_parser(input: &str) -> Result<PemMessage, Error<Rule>> {
 
 /// Internal helper for making Error
 #[inline]
-pub(crate) fn custom_error_span(message: &str, pair: &Pair<'_, Rule>) -> Error<Rule> {
+pub(crate) fn custom_error_span<S: Into<String>>(message: S, pair: &Pair<'_, Rule>) -> Error<Rule> {
     Error::new_from_span(
         ErrorVariant::CustomError {
-            message: message.to_owned(),
+            message: message.into(),
         },
         pair.as_span(),
     )
