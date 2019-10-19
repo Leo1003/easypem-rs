@@ -33,7 +33,7 @@ impl<'p> PemBuilder<'p> {
         let headers = self.headers.unwrap_or_default();
         PemMessage {
             label,
-            headers: headers,
+            headers,
             content: self.content,
         }
     }

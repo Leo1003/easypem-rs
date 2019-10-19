@@ -1,0 +1,18 @@
+WHITESPACE = _{ " " | "\t" }
+upperhex = _{ ASCII_DIGIT | 'A'..'F' }
+iachar = _{ ASCII_ALPHANUMERIC | "'" | "+" | "(" | ")" | "." | "/" |
+    "=" | "?" | "-" | "@" | "%" | "!" | "\"" | "_" | "<" | ">" }
+
+procver = @{ ASCII_DIGIT+ }
+pemtypes = @{ "ENCRYPTED" | "MIC-ONLY" | "MIC-CLEAR" | "CRL" }
+proctype = { "Proc-Type" ~ ":" ~ procver ~ "," ~ pemtypes ~ NEWLINE }
+
+contentdescrip = @{ ASCII_ALPHANUMERIC+ }
+contentdomain = { "Content-Domain" ~ ":" ~ contentdescrip ~ NEWLINE }
+
+dekalgo = @{ iachar+ }
+dekparameters = @{ (upperhex{2})+ }
+dekinfo = { "DEK-Info" ~ ":" ~ dekalgo ~ ("," ~ dekparameters) ~ NEWLINE }
+
+unsupported_hdr = { ANY* }
+pemhdr = { SOI ~ proctype ~ contentdomain? ~ dekinfo? ~ unsupported_hdr ~ EOI }

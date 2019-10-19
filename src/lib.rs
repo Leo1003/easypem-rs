@@ -4,7 +4,10 @@ extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
 
+use std::str::FromStr;
+
 mod builder;
+pub mod error;
 pub mod headers;
 mod parser;
 
@@ -15,10 +18,11 @@ pub struct PemMessage {
     pub content: Vec<u8>,
 }
 
-#[derive(Debug, PartialEq)]
-pub struct RawPemHeader {
-    pub name: String,
-    pub body: String,
+impl FromStr for PemMessage {
+    type Err = error::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parser::pem_parser(s)
+    }
 }
 
 pub const CERTIFICATE_LABEL: &str = "CERTIFICATE";
