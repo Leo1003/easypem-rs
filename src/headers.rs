@@ -2,14 +2,14 @@ use crate::parser::pest_err_span;
 use pest::error::Error;
 use pest::iterators::*;
 use pest::Parser;
-use std::fmt;
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
 
 /// Struct to store standard PEM header
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PemHeader {
     proc_type: Option<ProcType>,
-    content_domain: Option<String>,
+    content_domain: Option<ContentDomain>,
     dek_info: Option<DEKInfo>,
     /* Not Supported
     originator: Option<Originator>,
@@ -22,6 +22,49 @@ pub struct PemHeader {
 impl PemHeader {
     pub(crate) fn from_str(input: &str) -> Result<Self, Error<Rule>> {
         HeaderParser::parse_str(input)
+    }
+}
+
+impl PemHeader {
+    /// Return `true` if the header won't print anything out
+    ///
+    /// # Note
+    /// If the `Proc-Type` header field is not exist,
+    /// The header won't display anything
+    pub fn is_empty(&self) -> bool {
+        self.proc_type.is_none()
+    }
+
+    pub(self) fn from_pair(pair: Pair<Rule>) -> Result<Self, Error<Rule>> {
+        let mut hdr = PemHeader::default();
+
+        for hdr_entry in pair.into_inner() {
+            match hdr_entry.as_rule() {
+                Rule::proctype => hdr.proc_type = Some(ProcType::from_pair(hdr_entry)?),
+                Rule::contentdomain => {
+                    hdr.content_domain = Some(ContentDomain::from_pair(hdr_entry)?)
+                }
+                Rule::dekinfo => hdr.dek_info = Some(DEKInfo::from_pair(hdr_entry)?),
+                Rule::unsupported_hdr => (),
+                _ => unreachable!(),
+            }
+        }
+        Ok(hdr)
+    }
+}
+
+impl Display for PemHeader {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        if let Some(proc_type) = &self.proc_type {
+            writeln!(f, "{}", proc_type)?;
+            if let Some(domain) = &self.content_domain {
+                writeln!(f, "{}", domain)?;
+            }
+            if let Some(dek_info) = &self.dek_info {
+                writeln!(f, "{}", dek_info)?;
+            }
+        }
+        Ok(())
     }
 }
 
@@ -45,6 +88,12 @@ impl ProcType {
             .parse::<ProcTypeSpecifier>()
             .map_err(|_| pest_err_span("Invalid Proc-Type specifier", &pemtypes))?;
         Ok(Self(ver, types))
+    }
+}
+
+impl Display for ProcType {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "Proc-Type: {},{}", self.0, self.1)
     }
 }
 
@@ -72,6 +121,35 @@ impl FromStr for ProcTypeSpecifier {
     }
 }
 
+impl Display for ProcTypeSpecifier {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        match self {
+            Self::ENCRYPTED => write!(f, "ENCRYPTED"),
+            Self::MIC_ONLY => write!(f, "MIC-ONLY"),
+            Self::MIC_CLEAR => write!(f, "MIC-CLEAR"),
+            Self::CRL => write!(f, "CRL"),
+        }
+    }
+}
+
+/// `Content-Domain` header field
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ContentDomain(pub String);
+
+impl ContentDomain {
+    pub(self) fn from_pair(pair: Pair<Rule>) -> Result<Self, Error<Rule>> {
+        let mut pairs = pair.into_inner();
+        let descrip = pairs.next().unwrap();
+        Ok(Self(descrip.as_str().to_owned()))
+    }
+}
+
+impl Display for ContentDomain {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        write!(f, "Content-Domain: {}", &self.0)
+    }
+}
+
 /// `DEK-Info` header field
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DEKInfo {
@@ -96,25 +174,29 @@ impl DEKInfo {
     }
 }
 
+impl Display for DEKInfo {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        if self.parameter.is_empty() {
+            write!(f, "DEK-Info: {}", &self.algorithm)
+        } else {
+            write!(
+                f,
+                "DEK-Info: {},{}",
+                &self.algorithm,
+                hex::encode_upper(&self.parameter)
+            )
+        }
+    }
+}
+
 #[derive(Parser)]
 #[grammar = "headers.pest"]
 struct HeaderParser;
 
 impl HeaderParser {
     pub fn parse_str(input: &str) -> Result<PemHeader, Error<Rule>> {
-        let mut hdr = PemHeader::default();
         let pemhdr = HeaderParser::parse(Rule::pemhdr, input)?.next().unwrap();
-
-        for hdr_entry in pemhdr.into_inner() {
-            match hdr_entry.as_rule() {
-                Rule::proctype => hdr.proc_type = Some(ProcType::from_pair(hdr_entry)?),
-                Rule::contentdomain => hdr.content_domain = Some(hdr_entry.as_str().to_owned()),
-                Rule::dekinfo => hdr.dek_info = Some(DEKInfo::from_pair(hdr_entry)?),
-                Rule::unsupported_hdr => (),
-                _ => unreachable!(),
-            }
-        }
-        Ok(hdr)
+        Ok(PemHeader::from_pair(pemhdr)?)
     }
 }
 

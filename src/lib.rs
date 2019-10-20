@@ -4,6 +4,7 @@ extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
 
+use std::fmt::{Display, Formatter, Result as FmtResult};
 use std::str::FromStr;
 
 mod builder;
@@ -16,6 +17,23 @@ pub struct PemMessage {
     pub label: String,
     pub headers: headers::PemHeader,
     pub content: Vec<u8>,
+}
+
+impl Display for PemMessage {
+    fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        writeln!(f, "-----BEGIN {}-----", &self.label)?;
+        write!(f, "{}", &self.headers)?;
+        if !self.headers.is_empty() {
+            writeln!(f)?;
+        }
+        base64::encode(&self.content)
+            .as_bytes()
+            .chunks(64)
+            .map(|v| std::str::from_utf8(v).unwrap())
+            .map(|s| writeln!(f, "{}", s))
+            .collect::<FmtResult>()?;
+        write!(f, "-----END {}-----", &self.label)
+    }
 }
 
 impl FromStr for PemMessage {
