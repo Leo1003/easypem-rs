@@ -52,11 +52,3 @@ pub const PRIVKEY_LABEL: &str = "PRIVATE KEY";
 pub const ENC_PRIVKEY_LABEL: &str = "ENCRYPTED PRIVATE KEY";
 pub const ATTRCERT_LABEL: &str = "ATTRIBUTE CERTIFICATE";
 pub const PUBKEY_LABEL: &str = "PUBLIC KEY";
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn it_works() {
-        assert_eq!(2 + 2, 4);
-    }
-}

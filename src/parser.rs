@@ -86,6 +86,8 @@ pub(crate) fn pest_err_pos<S: Into<String>, R: RuleType>(message: S, pos: Positi
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::headers::*;
+    use hex_literal::hex;
 
     const RFC1421_FIGURE2: &str = "-----BEGIN PRIVACY-ENHANCED MESSAGE-----
 Proc-Type: 4,ENCRYPTED
@@ -186,17 +188,55 @@ YSBibGFuayBsaW5lOg0KDQpUaGlzIGlzIHRoZSBlbmQuDQo=
     fn pem_parse_figure2() {
         let pem = pem_parser(RFC1421_FIGURE2).unwrap();
         assert_eq!(&pem.label, "PRIVACY-ENHANCED MESSAGE");
+        assert_eq!(
+            pem.headers.proc_type,
+            Some(ProcType(4, ProcTypeSpecifier::ENCRYPTED))
+        );
+        assert_eq!(
+            pem.headers.content_domain,
+            Some(ContentDomain("RFC822".to_owned()))
+        );
+        assert_eq!(
+            pem.headers.dek_info,
+            Some(DEKInfo {
+                algorithm: "DES-CBC".to_owned(),
+                parameter: hex!("F8143EDE5960C597").to_vec()
+            })
+        );
     }
 
     #[test]
     fn pem_parse_figure3() {
         let pem = pem_parser(RFC1421_FIGURE3).unwrap();
         assert_eq!(&pem.label, "PRIVACY-ENHANCED MESSAGE");
+        assert_eq!(
+            pem.headers.proc_type,
+            Some(ProcType(4, ProcTypeSpecifier::ENCRYPTED))
+        );
+        assert_eq!(
+            pem.headers.content_domain,
+            Some(ContentDomain("RFC822".to_owned()))
+        );
+        assert_eq!(
+            pem.headers.dek_info,
+            Some(DEKInfo {
+                algorithm: "DES-CBC".to_owned(),
+                parameter: hex!("BFF968AA74691AC1").to_vec()
+            })
+        );
     }
 
     #[test]
     fn pem_parse_figure4() {
         let pem = pem_parser(RFC1421_FIGURE4).unwrap();
         assert_eq!(&pem.label, "PRIVACY-ENHANCED MESSAGE");
+        assert_eq!(
+            pem.headers.proc_type,
+            Some(ProcType(4, ProcTypeSpecifier::MIC_ONLY))
+        );
+        assert_eq!(
+            pem.headers.content_domain,
+            Some(ContentDomain("RFC822".to_owned()))
+        );
     }
 }

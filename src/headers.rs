@@ -8,9 +8,9 @@ use std::str::FromStr;
 /// Struct to store standard PEM header
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PemHeader {
-    proc_type: Option<ProcType>,
-    content_domain: Option<ContentDomain>,
-    dek_info: Option<DEKInfo>,
+    pub proc_type: Option<ProcType>,
+    pub content_domain: Option<ContentDomain>,
+    pub dek_info: Option<DEKInfo>,
     /* Not Supported
     originator: Option<Originator>,
     mic_info: Option<MICInfo>,
@@ -45,7 +45,7 @@ impl PemHeader {
                     hdr.content_domain = Some(ContentDomain::from_pair(hdr_entry)?)
                 }
                 Rule::dekinfo => hdr.dek_info = Some(DEKInfo::from_pair(hdr_entry)?),
-                Rule::unsupported_hdr => (),
+                Rule::unsupported_hdr | Rule::EOI => (),
                 _ => unreachable!(),
             }
         }
