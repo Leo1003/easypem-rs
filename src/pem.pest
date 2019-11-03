@@ -20,4 +20,4 @@ post_eb = { "-----END " ~ POP ~ "-----" }
 headers = { (header ~ NEWLINE)+ }
 content = { base64_char+ ~ (NEWLINE ~ base64_char+)* ~ "="{, 2} }
 
-pem = { pre_eb ~ NEWLINE ~ headers ~ NEWLINE ~ content ~ NEWLINE ~ post_eb }
+pem = { pre_eb ~ NEWLINE ~ (headers ~ NEWLINE)? ~ content ~ NEWLINE ~ post_eb }
