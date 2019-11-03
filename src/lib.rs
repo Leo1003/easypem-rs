@@ -12,7 +12,7 @@ pub mod error;
 pub mod headers;
 mod parser;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PemMessage {
     pub label: String,
     pub headers: headers::PemHeader,
