@@ -4,7 +4,7 @@ extern crate pest_derive;
 #[macro_use]
 extern crate lazy_static;
 
-use std::fmt::{Display, Formatter, Result as FmtResult};
+use std::fmt::{Display, Error as FmtError, Formatter, Result as FmtResult};
 use std::str::FromStr;
 
 mod builder;
@@ -12,6 +12,19 @@ pub mod error;
 pub mod headers;
 mod parser;
 
+/// Represent a PEM data
+///
+/// ```
+/// # use easypem::{PemMessage, headers::PemHeader};
+///
+/// let pem = PemMessage {
+///     label: "MESSAGE".to_owned(),
+///     headers: PemHeader::default(),
+///     content: b"This is a message".to_vec(),
+/// };
+///
+/// println!("{}", &pem);
+/// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PemMessage {
     pub label: String,
@@ -21,6 +34,9 @@ pub struct PemMessage {
 
 impl Display for PemMessage {
     fn fmt(&self, f: &mut Formatter) -> FmtResult {
+        if self.label.is_empty() {
+            return Err(FmtError);
+        }
         writeln!(f, "-----BEGIN {}-----", &self.label)?;
         write!(f, "{}", &self.headers)?;
         if !self.headers.is_empty() {
@@ -43,12 +59,21 @@ impl FromStr for PemMessage {
     }
 }
 
+/// Label for Certificate
 pub const CERTIFICATE_LABEL: &str = "CERTIFICATE";
+/// Label for X509 Certificate Revocation List
 pub const CRL_LABEL: &str = "X509 CRL";
+/// Label for Certification Request
 pub const CERTREQ_LABEL: &str = "CERTIFICATE REQUEST";
+/// Label for PKCS #7 Cryptographic Message
 pub const PKCS7_LABEL: &str = "PKCS7";
+/// Label for Cryptographic Message Syntax
 pub const CMS_LABEL: &str = "CMS";
+/// Label for PKCS #8 Private Key
 pub const PRIVKEY_LABEL: &str = "PRIVATE KEY";
+/// Label for PKCS #8 Encrypted Private Key
 pub const ENC_PRIVKEY_LABEL: &str = "ENCRYPTED PRIVATE KEY";
+/// Label for Attribute Certificates
 pub const ATTRCERT_LABEL: &str = "ATTRIBUTE CERTIFICATE";
+/// Label for Public Key
 pub const PUBKEY_LABEL: &str = "PUBLIC KEY";
